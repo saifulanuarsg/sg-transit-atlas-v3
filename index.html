@@ -55,8 +55,30 @@
   .conf{font-size:10px;border-radius:99px;padding:1px 7px;font-weight:600}
   .conf.medium{background:#e0f2fe;color:#075985} .conf.low{background:#fef9c3;color:#854d0e}
   .conf.verylow{background:#fee2e2;color:#991b1b} .conf.na{background:#f1f5f9;color:#64748b}
-  #methodbtn{border-top:1px solid var(--line);padding:8px 16px;font-size:12px;color:var(--mut);cursor:pointer;background:var(--card)}
-  #methodbtn:hover{color:var(--ink)}
+  #footrow{display:flex;border-top:1px solid var(--line);background:var(--card)}
+  #methodbtn,#clientbtn{flex:1;padding:8px 16px;font-size:12px;color:var(--mut);cursor:pointer}
+  #methodbtn:hover,#clientbtn:hover{color:var(--ink)}
+  #clientbtn{border-left:1px solid var(--line);text-align:right}
+  #extnote{display:none;padding:6px 14px;font-size:10.5px;color:#9a3412;background:#fff7ed;border-bottom:1px solid #fed7aa}
+  #client{position:absolute;inset:0;background:rgba(15,23,42,.45);z-index:950;display:none;align-items:center;justify-content:center}
+  #client>div{background:#fff;border-radius:14px;max-width:720px;width:92%;max-height:86vh;overflow-y:auto;padding:26px 30px;margin:14px;position:relative}
+  #client .x{position:absolute;top:12px;right:14px;border:0;background:none;font-size:18px;color:var(--mut);cursor:pointer}
+  .cbrand{font-size:15px;font-weight:700;margin-bottom:2px}
+  .cbadge{display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:99px;padding:1px 9px;font-size:10.5px;font-weight:600;margin:4px 0 10px}
+  #cbody h4{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin:14px 0 4px}
+  #cbody p{font-size:12.5px;color:#334155;margin:4px 0}
+  #cbody table{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+  #cbody th,#cbody td{border:1px solid var(--line);padding:4.5px 7px;text-align:right}
+  #cbody th{background:var(--bg);font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--mut)}
+  #cbody th:nth-child(1),#cbody td:nth-child(1),#cbody th:nth-child(2),#cbody td:nth-child(2){text-align:left}
+  #cprint{margin-top:14px;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:8px;padding:6px 14px;font-size:12.5px;cursor:pointer}
+  .cfoot{font-size:10.5px;color:var(--mut);margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+  @media print{
+    #app,#detail,.legend,#method{display:none!important}
+    #client{display:block!important;position:static;background:#fff}
+    #client>div{max-width:100%;width:100%;max-height:none;box-shadow:none;margin:0;padding:0;border-radius:0}
+    .noprint{display:none!important}
+  }
   #map{flex:1;height:100%}
   #detail{position:absolute;top:12px;right:12px;width:330px;max-height:calc(100% - 24px);overflow-y:auto;
     background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px rgba(15,23,42,.13);
@@ -132,23 +154,29 @@
     </div>
 
     <div id="modebar">
-      Rank by
+      <button id="modInt" class="on">Internal · passengers</button>
+      <button id="modExt">External · street</button>
+      <span style="color:var(--line)">·</span>
       <button id="mTI" class="on">Target boardings</button>
       <button id="mIDX">Audience index</button>
       <span id="floornote"></span>
     </div>
+    <div id="extnote">External figures are <b>relative indices</b> (100 = network average) — no street-level count exists in open data. Not people, and never summed with internal.</div>
     <div id="ranks">
       <table>
         <thead><tr>
           <th>#</th><th>Svc</th>
-          <th><span class="lyr">modelled</span>Target/wd</th>
-          <th><span class="lyr">modelled</span>Index</th>
+          <th id="thA"><span class="lyr">modelled</span>Target/wd</th>
+          <th id="thB"><span class="lyr">modelled</span>Index</th>
           <th><span class="lyr">modelled</span>Conf.</th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <div id="methodbtn">ⓘ Method, sources &amp; assumptions</div>
+    <div id="footrow">
+      <div id="methodbtn">ⓘ Method &amp; sources</div>
+      <div id="clientbtn">⎙ Client summary</div>
+    </div>
   </div>
   <div id="map"></div>
 </div>
@@ -209,6 +237,18 @@
      national rate holds within every dwelling type or age band, so they rank areas by composition, not by
      observed local behaviour. Because they derive from the Housing and Age levers, the UI clears the source
      lever when a propensity chip is selected (and vice versa) — stacking them would double-count one dimension.</p>
+  <h3>External (street-level) model</h3>
+  <p>Bus exteriors reach a different audience: people waiting at stops, pedestrians, street-level activity along
+     the corridor. The external model resamples each route every ~100&nbsp;m and composes three observed inputs —
+     corridor tap-ins (all stops within 150&nbsp;m, any service), street-activity places within 150&nbsp;m, and the
+     corridor's crossed subzones (which carry your composed audience) — into a <b>relative exposure index</b>
+     (100 = network average). The ranking accumulates that density over route length (<b>exposure-km</b>): a
+     wrapped bus is seen along its whole run, so a long route through active corridors accumulates more exterior
+     exposure than a short dense one — both the per-km density and the accumulated figure are shown. No
+     pedestrian-count dataset exists for Singapore in open data, so this is a ranking signal, never a people
+     count; it carries at most <i>low</i> confidence, and it is never summed with internal figures. Known under-reads: vehicular exposure (no open link-level traffic counts — expressway-heavy routes
+     are under-scored) and behaviour levers (stop-level, not applied to corridors). Monsoon rain (NE Dec–early Mar,
+     SW Jun–Sep) reduces street dwell and visibility — shown as an advisory, deliberately not applied to figures.</p>
   <h3>Ethnicity</h3>
   <p>Ethnic composition is shown per route and subzone as creative and language guidance only — festive timing,
      language mix. It is not a selectable audience filter and enters no score, by design.</p>
@@ -217,6 +257,14 @@
      control), never asserted pre-campaign.</p>
   <p style="margin-top:12px;color:var(--mut);font-size:11.5px">Singapore Open Data Licence — LTA DataMall, SingStat, URA, HDB.
      Index cap ×3 national. Index-ranking volume floor applies. Built 18 Jul 2026.</p>
+</div></div>
+
+<div id="client"><div>
+  <button class="x noprint" onclick="document.getElementById('client').style.display='none'">✕</button>
+  <div class="cbrand">SG Transit Atlas v3 — plan summary</div>
+  <span class="cbadge">Modelled opportunities to see — not panel-measured</span>
+  <div id="cbody"></div>
+  <button id="cprint" class="noprint" onclick="window.print()">Print / save as PDF</button>
 </div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -238,8 +286,8 @@ const DWGROUPS=[
   {k:'hdb45',label:'HDB 4–5R/Exec',idx:[2,3]},
   {k:'priv',label:'Private (condo+landed)',idx:[4,5]}];
 
-let META,SUB,STOPS,ROUTES;                 // data
-let map,szLayer,routeLayers={},sel=null,mode='ti';
+let META,SUB,STOPS,ROUTES,EXT_MED;         // data
+let map,szLayer,routeLayers={},sel=null,mode='ti',model='int';
 // audience state
 let agePreset='all', bands=new Set(), sex='any', dwSel=new Set(), ctxMv=false, ctxDt=false, behSel=new Set(), spendSel=new Set(), online=false, dgOn=false;
 // beh indices: 0 grocery 1 mall 2 fnb 3 hawker 4 yfam 5 sfam 6 fit 7 health 8 eldercare 9 remit 10 tourist 11 community
@@ -274,10 +322,15 @@ const gm=a=>Math.exp(a.reduce((s,x)=>s+Math.log(Math.max(x,1e-6)),0)/a.length);
 async function boot(){
  try{
   document.title='v3:fetching';
-  const DV='v20260718e';
+  const DV='v20260719a';
   [META,SUB,STOPS,ROUTES]=await Promise.all(
     ['data/meta.json','data/subzones.json','data/stops_v3.json','data/routes.json'].map(u=>fetch(u+'?'+DV).then(r=>r.json())));
   document.title='v3:data-ok';
+  const med=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)]||1;};
+  const wpks=[],ppks=[];
+  for(const r of Object.values(ROUTES)){ if(!r.ext||!r.ext.km)continue;
+    wpks.push(r.ext.wait/r.ext.km); ppks.push(r.ext.poi/r.ext.km); }
+  EXT_MED={w:med(wpks),p:med(ppks)};
   document.getElementById('floornote').textContent=`volume floor ${fmt(META.index_mode_floor)} allocated boardings`;
   const s=document.getElementById('srcList');
   Object.values(META.sources).forEach(v=>{const li=document.createElement('li');li.textContent=v;s.appendChild(li);});
@@ -364,7 +417,29 @@ function buildControls(){
     pc.appendChild(c);});
   document.getElementById('mTI').onclick=e=>{mode='ti';toggleMode(e.target);};
   document.getElementById('mIDX').onclick=e=>{mode='idx';toggleMode(e.target);};
+  document.getElementById('modInt').onclick=()=>setModel('int');
+  document.getElementById('modExt').onclick=()=>setModel('ext');
   document.getElementById('methodbtn').onclick=()=>document.getElementById('method').style.display='flex';
+  document.getElementById('clientbtn').onclick=openClient;
+}
+function setModel(m){
+  model=m;
+  document.getElementById('modInt').classList.toggle('on',m==='int');
+  document.getElementById('modExt').classList.toggle('on',m==='ext');
+  document.getElementById('extnote').style.display=m==='ext'?'block':'none';
+  document.getElementById('mTI').textContent=m==='ext'?'Exposure (total)':'Target boardings';
+  document.getElementById('thA').innerHTML=m==='ext'
+    ?'<span class="lyr">modelled</span>Exp-km (rel)'
+    :'<span class="lyr">modelled</span>Target/wd';
+  document.getElementById('thB').innerHTML=m==='ext'
+    ?'<span class="lyr">modelled</span>Audience idx'
+    :'<span class="lyr">modelled</span>Index';
+  syncFloornote(); render(); updateSummaryCount();
+}
+function syncFloornote(){
+  document.getElementById('floornote').textContent=model==='ext'
+    ?`floor ${fmt(META.index_mode_floor)} corridor tap-ins`
+    :`volume floor ${fmt(META.index_mode_floor)} allocated boardings`;
 }
 function syncBandGrid(){
   META.bands.forEach((b,i)=>document.getElementById('band-'+i).classList.toggle('on',bands.has(i)));
@@ -512,6 +587,29 @@ function recompute(){
     rScores[n]={ti:anyLever?num/100:alloc, idx:den>0?num/den:null, cov, conf,
                 capped:den>0?capv/den:0, alloc, raw:r.raw_wd, anyLever, behActive};
   }
+  // external (street-level): relative exposure index per route — never people
+  for(const [n,r] of Object.entries(ROUTES)){
+    const sc=rScores[n]; if(!sc||!r.ext||!r.ext.km)continue;
+    const e=r.ext;
+    const wIdx=Math.min((e.wait/e.km)/EXT_MED.w*100,META.cap);
+    const pIdx=Math.min((e.poi/e.km)/EXT_MED.p*100,META.cap);
+    const act=gm([wIdx,pIdx]);
+    let aNum=0,aDen=0,tot=0;
+    for(const [k,km] of Object.entries(e.szw)){
+      tot+=km; const v=szIdx[+k]; if(v!=null){aNum+=km*v;aDen+=km;}
+    }
+    const aCov=tot>0?aDen/tot:0;
+    let extAud=null;
+    if(!anyLever) extAud=100;
+    else if(demActive&&aDen>0) extAud=aNum/aDen;
+    // behaviour-only audiences are stop-level and do not map to corridors — extAud stays null
+    const extExp=Math.min(extAud!=null?act*extAud/100:act,META.cap);
+    const extTot=extExp/100*e.km;   // exposure-km: activity x audience accumulated over route length (relative)
+    let extConf='low';
+    if(demActive&&aCov<0.8) extConf='very low';
+    if(anyLever&&extAud==null) extConf='very low';
+    sc.ext={act,extAud,extExp,extTot,aCov,km:e.km,wait:e.wait,poi:e.poi,extConf};
+  }
   updateSummary(anyLever); render();
 }
 function audienceLabel(){
@@ -538,11 +636,15 @@ function audienceLabel(){
 }
 const contiguous=a=>a.every((v,i)=>i===0||v===a[i-1]+1);
 function updateSummary(anyLever){
-  const n=Object.values(rScores).filter(r=>mode!=='idx'||r.alloc>=META.index_mode_floor).length;
   const multi=[ageActive(),dwSel.size>0,ctxMv,ctxDt,behSel.size>0,spendSel.size>0,online||dgOn].filter(Boolean).length>1;
   document.getElementById('audsum').innerHTML=
-    `Audience: ${audienceLabel()} · ${n} routes ranked`+
+    `Audience: ${audienceLabel()} · <span id="audn"></span>`+
     (multi?` <span class="warn">· combined levers are directional (correlation overstates concentration)</span>`:'');
+  updateSummaryCount();
+}
+function updateSummaryCount(){
+  const el=document.getElementById('audn');
+  if(el) el.textContent=`${ranked().length} routes ranked (${model==='ext'?'external':'internal'})`;
 }
 // ---- map & render -----------------------------------------------------------
 function buildMap(){
@@ -579,6 +681,10 @@ function legend(){
     (behSel.size?`<div style="margin-top:4px;font-size:10px;color:var(--mut);font-style:italic">Behaviour levers score at stop level — not shaded on areas.</div>`:'');
 }
 function ranked(){
+  if(model==='ext')
+    return Object.entries(rScores).filter(([n,r])=>r.ext)
+      .filter(([n,r])=>mode==='ti'||r.ext.wait>=META.index_mode_floor)
+      .sort((a,b)=>mode==='ti'?b[1].ext.extTot-a[1].ext.extTot:(b[1].ext.extAud??0)-(a[1].ext.extAud??0));
   return Object.entries(rScores)
     .filter(([n,r])=>mode==='ti'||r.alloc>=META.index_mode_floor)
     .sort((a,b)=>mode==='ti'?b[1].ti-a[1].ti:(b[1].idx??0)-(a[1].idx??0));
@@ -592,8 +698,11 @@ function render(){
     if(n!==sel)l.setStyle({color:'#475569',weight:inTop.has(n)?1.6:1,opacity:inTop.has(n)?.45:.15});
   list.forEach(([n,r],i)=>{
     const tr=document.createElement('tr'); if(n===sel)tr.className='sel';
-    tr.innerHTML=`<td>${i+1}</td><td>${n}</td><td>${fmt(r.ti)}</td><td>${r.idx!=null?r.idx.toFixed(1):'—'}</td>
-      <td><span class="conf ${confCls(r.conf)}">${r.conf}</span></td>`;
+    tr.innerHTML=model==='ext'
+      ?`<td>${i+1}</td><td>${n}</td><td>${r.ext.extTot.toFixed(1)}</td><td>${r.ext.extAud!=null?r.ext.extAud.toFixed(1):'—'}</td>
+        <td><span class="conf ${confCls(r.ext.extConf)}">${r.ext.extConf}</span></td>`
+      :`<td>${i+1}</td><td>${n}</td><td>${fmt(r.ti)}</td><td>${r.idx!=null?r.idx.toFixed(1):'—'}</td>
+        <td><span class="conf ${confCls(r.conf)}">${r.conf}</span></td>`;
     tr.onclick=()=>selectRoute(n);
     rows.appendChild(tr);});
   if(sel)fillDetail(sel);
@@ -626,10 +735,14 @@ function fillDetail(n){
   const mix=routeMix(r);
   document.getElementById('dSvc').textContent='Service '+n;
   document.getElementById('dName').textContent=r.name;
+  const e=s.ext;
   document.getElementById('dBody').innerHTML=`
-    <div class="grp"><h3 class="me">MEASURED — LTA DataMall PV</h3>
+    <div class="grp"><h3 class="me">MEASURED — LTA DataMall PV · route geometry</h3>
       <div class="kv"><span>Weekday tap-ins at served stops</span><b>${r.raw_wd.toLocaleString()}</b></div>
       <div class="kv"><span>Stops served</span><b>${r.stops.length}</b></div>
+      ${e?`<div class="kv"><span>Route length</span><b>${e.km} km</b></div>
+      <div class="kv"><span>Corridor tap-ins /wd (any service, ≤150 m)</span><b>${e.wait.toLocaleString()}</b></div>
+      <div class="kv"><span>Street places ≤150 m (observed locations)</span><b>${e.poi.toLocaleString()}</b></div>`:''}
     </div>
     <div class="grp"><h3 class="mo">MODELLED — internal (passenger) model</h3>
       <div class="kv"><span>Allocated boardings /wd</span><b>${Math.round(s.alloc).toLocaleString()}</b></div>
@@ -640,8 +753,20 @@ function fillDetail(n){
       ${behRows(r)}
       <div class="chips2"><span class="chip">equal-share allocation</span><span class="chip">residence join unverified</span><span class="chip">no ride-length factor</span>${behSel.size?`<span class="chip">location-inferred behaviour</span>`:''}${(spendSel.size||online||dgOn)?`<span class="chip">propensity: ecological join</span>`:''}${s.capped>0.005?`<span class="chip">${(s.capped*100).toFixed(0)}% index-capped</span>`:''}${[ageActive()||dwSel.size,ctxMv,ctxDt,behSel.size>0,spendSel.size>0||online||dgOn].filter(Boolean).length>1?`<span class="chip">multi-lever: directional</span>`:''}</div>
     </div>
+    ${e?`<div class="grp"><h3 class="mo">MODELLED — external (street-level) model</h3>
+      <div class="kv"><span>Corridor activity index (relative)</span><b>${e.act.toFixed(1)}</b></div>
+      <div class="kv"><span>External audience index</span><b>${e.extAud!=null?e.extAud.toFixed(1):'—'}</b></div>
+      <div class="kv"><span>Exposure density (per km, 100 = network avg)</span><b>${e.extExp.toFixed(1)}</b></div>
+      <div class="kv"><span>Exposure accumulation (density × km, relative)</span><b>${e.extTot.toFixed(1)}</b></div>
+      <div class="kv"><span>Corridor audience coverage</span><b>${(e.aCov*100).toFixed(0)}%</b></div>
+      <div class="kv"><span>Confidence</span><b><span class="conf ${confCls(e.extConf)}">${e.extConf}</span></b></div>
+      <div class="chips2"><span class="chip">relative index — not people</span><span class="chip">no pedestrian ground truth</span><span class="chip">±50 m corridor sampling</span><span class="chip">vehicular exposure under-read</span>${s.behActive?`<span class="chip">behaviour levers not applied to corridors</span>`:''}</div>
+      <div class="note">Never summed with internal figures — two audiences, one asset.</div>
+    </div>`:''}
     <div class="grp"><h3 class="ju">JUDGEMENT</h3>
-      <div class="note">None applied. Context multipliers and format factors arrive with the ad-ops format sheet.</div>
+      <div class="note">None applied to figures. Context multipliers and format factors arrive with the ad-ops
+      format sheet. Monsoon advisory: NE monsoon (Dec–early Mar) and SW monsoon (Jun–Sep) rain hours reduce
+      street dwell and external visibility — advisory only, deliberately not applied (no calibration data).</div>
     </div>
     ${mix?`<div class="grp"><h3 class="dg">DIAGNOSTIC — language mix of served areas</h3>
       <div class="mixbar">${mixBarHtml(mix)}</div><div class="mixleg">${mixLegHtml(mix)}</div>
@@ -662,6 +787,36 @@ function behRows(r){
 }
 function closeDetail(){
   sel=null; document.getElementById('detail').style.display='none'; render();
+}
+function openClient(){
+  const list=ranked().slice(0,10);
+  const rows=list.map(([n,r],i)=>{
+    const e=r.ext;
+    return `<tr><td>${i+1}</td><td>${n} — ${ROUTES[n].name}</td>
+      <td>${fmt(r.ti)}</td><td>${r.idx!=null?r.idx.toFixed(1):'—'}</td>
+      <td>${e?e.extTot.toFixed(1):'—'}</td><td>${e&&e.extAud!=null?e.extAud.toFixed(1):'—'}</td>
+      <td>${model==='ext'?(e?e.extConf:'—'):r.conf}</td></tr>`;}).join('');
+  document.getElementById('cbody').innerHTML=`
+    <h4>Target audience</h4>
+    <p><b>${audienceLabel()}</b></p>
+    <h4>Recommended bus routes — ranked by ${model==='ext'?'external (street-level) exposure':'internal (passenger) reach'}${mode==='idx'?', audience-index mode':''}</h4>
+    <table><thead><tr><th>#</th><th>Service</th><th>Internal target boardings /wd (modelled)</th><th>Internal audience idx (modelled)</th><th>External exposure (modelled · exposure-km, relative)</th><th>External audience idx (modelled)</th><th>Confidence</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <h4>How to read these figures</h4>
+    <p>All audience figures are <b>modelled opportunities to see, not panel-measured</b> — Singapore has no
+       audited OOH audience currency, and we say so rather than imply one. Internal figures model passengers
+       (boardings at served stops, profiled by the residential make-up of each stop's catchment — an assumption
+       we state, not hide). External figures are a <b>relative index</b> of street-level exposure (corridor
+       waiting volume and street activity); no pedestrian-count dataset exists, so external is a ranking signal,
+       never a people count, and the two are never added together. Every figure carries a confidence label.</p>
+    <p>Ethnic composition is used only as creative and language guidance (festive timing, language mix), never
+       as a targeting filter — by policy. Campaign resonance is measured post-campaign against a matched control,
+       never asserted in advance.</p>
+    <div class="cfoot">Sources: LTA DataMall passenger volume (Jul 2026 bake) · SingStat Census 2020 ·
+      URA Master Plan 2019 subzones · HDB resale (12 mo) · HES 2023 · IMDA infocomm surveys ·
+      Singapore Open Data Licence. Generated ${new Date().toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'})} ·
+      SG Transit Atlas v3 (Ship 2).</div>`;
+  document.getElementById('client').style.display='flex';
 }
 boot();
 </script>

@@ -80,10 +80,27 @@ score exists anywhere.
 planning_areas) plus the discrimination-test downloads (subzone boundaries, census
 pickles), writes `data/{subzones,routes,scores}.json` (~1.9 MB total).
 
-## Ship 1 stated gaps (also in the in-app method note)
+## Ship 2 (19 Jul 2026): external model + client export
+
+Two models, one asset, never summed. The **external (street-level) model** scores
+bus exteriors: each route corridor is resampled every ~100 m and composed from
+corridor tap-ins (all stops ≤150 m, any service — waiting people see exteriors),
+street-activity places ≤150 m, and the crossed subzones carrying the composed
+audience. Output is a relative index (100 = network average) — no pedestrian-count
+dataset exists in open data, so it is a ranking signal, never a people count, at
+most "low" confidence, ranked by exposure-km (density accumulated over route
+length). Vehicular exposure is a stated under-read (no open link-level traffic
+counts). Monsoon visibility is an advisory, deliberately not applied to figures.
+
+**Client summary** (⎙ button): print-ready one-pager — audience definition, top-10
+routes with internal and external figures side by side, the how-to-read note
+("modelled opportunities to see — not panel-measured"), ethnicity policy line,
+sources and vintages.
+
+## Stated gaps (also in the in-app method note)
 
 - Hourly dayparts pending a DataMall account key (volumes are weekday daily).
 - Equal-share stop-to-route allocation (frequency data not held; OD is Ship 3).
-- Unit is target-audience boardings per weekday, not impressions (no ride-length
-  factor yet).
-- External (street-level) model is Ship 2.
+- Internal unit is target-audience boardings per weekday, not impressions (no
+  ride-length factor yet).
+- External model has no ground truth — calibration counts are a budget decision.

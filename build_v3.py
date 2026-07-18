@@ -289,6 +289,66 @@ for bi in range(len(BEHAVIOURS)):
 print("behaviour baselines:", {BEHAVIOURS[i][0]: b_base[i] for i in range(len(BEHAVIOURS))})
 
 net = json.load(open(os.path.join(V2, "network.json")))
+
+# ---- Ship 2: external (street-level) corridor precompute ---------------------
+# Resample each route polyline every ~100 m; collect corridor stops (ANY service
+# — people waiting at a stop see bus exteriors regardless of what they board) and
+# street-activity POIs within 150 m via a spatial hash; accumulate corridor km
+# per crossed subzone so the client can apply any composed audience externally.
+# ~100 m sampling gives ±50 m corridor-membership error — stated, acceptable for
+# a relative index. No pedestrian-count ground truth exists anywhere in this.
+MLAT = 110540.0; MLNG = 111320.0 * math.cos(math.radians(1.352))
+R150 = 150.0
+CELL_LAT = R150 / MLAT; CELL_LNG = R150 / MLNG
+
+def gridify(pts):
+    g = defaultdict(list)
+    for i, (x, y) in enumerate(pts):
+        g[(int(x / CELL_LNG), int(y / CELL_LAT))].append(i)
+    return g
+
+def near(grid, pts, x, y):
+    cx, cy = int(x / CELL_LNG), int(y / CELL_LAT)
+    out = []
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for i in grid.get((cx + dx, cy + dy), ()):
+                px, py = pts[i]
+                if ((px - x) * MLNG) ** 2 + ((py - y) * MLAT) ** 2 <= R150 * R150:
+                    out.append(i)
+    return out
+
+stop_codes = list(stops.keys())
+stop_pts = [(stops[c][0], stops[c][1]) for c in stop_codes]
+stop_grid = gridify(stop_pts)
+poi_pts = [pt for _, _, _, pts in BEHAVIOURS for pt in pts]
+poi_grid = gridify(poi_pts)
+
+_loc_cache = {}
+def locate_cached(x, y):
+    k = (round(x, 3), round(y, 3))
+    if k not in _loc_cache: _loc_cache[k] = locate(x, y)
+    return _loc_cache[k]
+
+def resample(segs, step_m=100.0):
+    out = []
+    for seg in segs:
+        for (x1, y1), (x2, y2) in zip(seg, seg[1:]):
+            dx = (x2 - x1) * MLNG; dy = (y2 - y1) * MLAT
+            d = (dx * dx + dy * dy) ** 0.5
+            n = max(int(d // step_m), 1)
+            for t in range(n):
+                out.append((x1 + (x2 - x1) * t / n, y1 + (y2 - y1) * t / n))
+        if seg: out.append(tuple(seg[-1]))
+    return out
+
+def seg_km(segs):
+    d = 0.0
+    for seg in segs:
+        for (x1, y1), (x2, y2) in zip(seg, seg[1:]):
+            d += (((x2 - x1) * MLNG) ** 2 + ((y2 - y1) * MLAT) ** 2) ** 0.5
+    return d / 1000.0
+
 routes_out = {}
 for s in net["services"]:
     if s["feeder"]: continue
@@ -296,9 +356,22 @@ for s in net["services"]:
     dirs = route_stops.get(n, [])
     codes = sorted({c for d in dirs for c in d})
     raw_wd = sum((vol.get(c) or {}).get("wd", 0) for c in codes)
+    samples = resample(s["segs"])
+    cstops, cpois, szw = set(), set(), defaultdict(float)
+    for x, y in samples:
+        cstops.update(near(stop_grid, stop_pts, x, y))
+        cpois.update(near(poi_grid, poi_pts, x, y))
+    step_km = 0.1
+    for x, y in samples[::2]:  # subzone weights at ~200 m — locate is the cost
+        i = locate_cached(x, y)
+        if i >= 0: szw[i] += step_km * 2
+    wait = sum((vol.get(stop_codes[i]) or {}).get("wd", 0) for i in cstops)
     routes_out[n] = {"name": s["name"], "raw_wd": round(raw_wd), "stops": codes,
-                     "segs": [[[round(x, 5), round(y, 5)] for x, y in seg] for seg in s["segs"]]}
-print(f"trunk routes: {len(routes_out)}")
+                     "segs": [[[round(x, 5), round(y, 5)] for x, y in seg] for seg in s["segs"]],
+                     "ext": {"km": round(seg_km(s["segs"]), 1), "wait": round(wait),
+                             "poi": len(cpois),
+                             "szw": {str(k): round(v, 2) for k, v in szw.items()}}}
+print(f"trunk routes: {len(routes_out)} | locate cache {len(_loc_cache)} cells")
 
 feats = []
 for f in szgj["features"]:
@@ -334,7 +407,8 @@ meta = {
         "behaviour": "Consumer-behaviour layers: POI registries (OneMap themes, OSM, NEA hawker centres d_4a086da0a5553be1d89383cd90d07ecd, ECDA pre-schools d_61eefab99958fd70e6aab17320a71f1c) counted within 400 m of each stop. Locations observed; the behaviour is inferred.",
         "spend": "Spend propensity: HES 2023, average monthly household expenditure by type of goods and services (detailed) x dwelling type (SingStat Tablebuilder table 17971), joined through each subzone's housing mix (Others dwellings excluded, shares renormalised).",
         "digital": f"Digital propensity: IMDA online shoppers by age (d_276031cfd1b2929bb795cdcedd54989e, latest machine-readable year {latest_yr} — gradient signal) and individuals' internet usage by age group, 2024 (d_3f4bfee2d42f8fb3bea3218c01aa9902, three broad bands; survey band 18-39 approximated onto census 20-39), each joined through subzone age mix.",
-        "personas": "Persona presets are one-click recipes over the open-data levers, named after MooveSMART's taxonomy for comparability. Each shows its ingredients in the audience line. Job Seekers is deliberately not scored: no open-data signal exists (MOM unemployment is national-only)."},
+        "personas": "Persona presets are one-click recipes over the open-data levers, named after MooveSMART's taxonomy for comparability. Each shows its ingredients in the audience line. Job Seekers is deliberately not scored: no open-data signal exists (MOM unemployment is national-only).",
+        "external": "External (street-level) model: route corridors resampled every ~100 m; corridor stop-waiting volume (tap-ins at ALL stops within 150 m, any service — waiting people see exteriors), street-activity POIs within 150 m (union of the behaviour registries), and corridor km per crossed subzone. No pedestrian-count dataset exists for Singapore in open data — the result is a RELATIVE index, never a people count."},
     "assumptions": [
         "Equal-share allocation: a stop's tap-ins are split equally across all services calling there (frequency data not held; OD-constrained allocation planned).",
         "Residence join: boarders are profiled as residents of the stop's subzone. This is the model's weakest link.",
@@ -342,7 +416,9 @@ meta = {
         "Indices capped at 300 (x3 national); capped contribution is tracked and widens the confidence label.",
         "Combined levers multiply as independent shares (geometric mean of indices); real levers correlate, so combined indices overstate concentration — treat multi-lever audiences as directional.",
         "Behaviour levers are stop-catchment POI density indices: being near a supermarket is evidence of grocery-shopper presence, not proof of shopping. Density uses an additive-smoothed ratio ((count+1)/(baseline+1)), floored at 25 and capped at 300; behaviour levers always carry at most 'low' confidence.",
-        "Spend and digital propensity are ecological joins: national rates by dwelling type (HES 2023) or age band (IMDA) applied to each subzone's mix. They assume rates are uniform within a type/band, so they cannot be combined with the Housing or Age levers they derive from — the UI enforces this."]}
+        "Spend and digital propensity are ecological joins: national rates by dwelling type (HES 2023) or age band (IMDA) applied to each subzone's mix. They assume rates are uniform within a type/band, so they cannot be combined with the Housing or Age levers they derive from — the UI enforces this.",
+        "External exposure is a relative index (100 = network average), composed from corridor waiting volume per km, street-POI density per km, and the corridor-weighted audience index. It has no pedestrian-count ground truth, carries at most 'low' confidence, is never a people count, and is never summed with internal figures. Corridor membership sampled at ~100 m (±50 m error). Road hierarchy and vehicle traffic are NOT included — no open link-level traffic counts are verified — so the model under-reads vehicular exposure on expressways.",
+        "Monsoon visibility: NE monsoon (Dec-early Mar) and SW monsoon (Jun-Sep) rain hours reduce street dwell and external visibility. This is shown as an advisory (judgement) and deliberately NOT applied to any figure — the discount curve has no calibration data."]}
 
 json.dump({"type": "FeatureCollection", "features": feats}, open(os.path.join(OUT, "subzones.json"), "w"), separators=(",", ":"))
 json.dump(stops_out, open(os.path.join(OUT, "stops_v3.json"), "w"), separators=(",", ":"))
