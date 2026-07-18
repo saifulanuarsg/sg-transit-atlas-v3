@@ -19,6 +19,19 @@ that widen the confidence label when active. Scoring is client-side from raw
 subzone census counts; combined levers join by geometric mean and are flagged
 "directional" because correlated levers overstate concentration.
 
+**Consumer behaviour (Ship 1.2):** twelve location-inferred behaviour levers,
+each a stop-catchment density index (places within 400 m of a stop, indexed to
+the volume-weighted network average, floored 25 / capped 300): grocery shoppers
+(supermarkets), mall shoppers, F&B chain dining (HPB), F&B hawker (NEA hawker
+centres, new fetch), young families (ECDA pre-schools, new fetch, 2,290 pts),
+school-age families, fitness, health & pharmacy, seniors' services, migrant
+remitters, tourists, community heartland. Locations are observed from cited
+registries; the behaviour is inferred and always carries at most "low"
+confidence. Behaviour levers score at stop level and combine with demographic
+levers by geometric mean. HES 2023 spend-by-dwelling propensity was sought and
+identified but its by-dwelling tables are not machine-readable on data.gov.sg
+yet — named as the next data source, not proxied.
+
 Subzone choropleth of the composed index; route detail card with figures grouped
 in three always-separate layers (Measured / Modelled / Judgement); language mix
 shown as creative guidance only — deliberately not a targeting filter. Rank by
