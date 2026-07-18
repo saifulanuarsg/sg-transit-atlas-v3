@@ -30,6 +30,7 @@
   .c.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .c.ctx.on{background:#7c3aed;border-color:#7c3aed}
   .c.beh.on{background:#0d9488;border-color:#0d9488;color:#fff}
+  .c.sp.on{background:#d97706;border-color:#d97706;color:#fff}
   #bandgrid{display:none;flex-wrap:wrap;gap:3px;margin-top:5px}
   #bandgrid .c{font-size:11px;padding:2px 8px}
   #audsum{font-size:11.5px;color:var(--accent);font-weight:600;margin-top:9px}
@@ -116,6 +117,10 @@
         <div class="lab">Consumer behaviour <span class="geo">stop catchment · location-inferred · low confidence</span></div>
         <div class="chips" id="behChips"></div>
       </div>
+      <div class="brow">
+        <div class="lab">Spend &amp; digital propensity <span class="geo">modelled · HES 2023 home-type mix / IMDA age mix</span></div>
+        <div class="chips" id="spendChips"></div>
+      </div>
       <div id="audsum"></div>
     </div>
 
@@ -181,6 +186,14 @@
      flipping between floor and cap. A spend-propensity join from the Household Expenditure Survey 2023
      (by dwelling type) has been identified but its by-dwelling tables are not yet machine-readable on data.gov.sg;
      it is the named next data source, not silently proxied.</p>
+  <h3>Spend &amp; digital propensity</h3>
+  <p>Spend levers apply HES 2023 average monthly household expenditure (by goods/services division × dwelling
+     type, SingStat Tablebuilder table 17971) to each subzone's housing mix. The online-shoppers lever applies
+     IMDA's online-shopper rate by age (latest machine-readable year is 2018 — the age gradient is the signal;
+     absolute levels are outdated) to each subzone's age mix. Both are <i>ecological joins</i>: they assume the
+     national rate holds within every dwelling type or age band, so they rank areas by composition, not by
+     observed local behaviour. Because they derive from the Housing and Age levers, the UI clears the source
+     lever when a propensity chip is selected (and vice versa) — stacking them would double-count one dimension.</p>
   <h3>Ethnicity</h3>
   <p>Ethnic composition is shown per route and subzone as creative and language guidance only — festive timing,
      language mix. It is not a selectable audience filter and enters no score, by design.</p>
@@ -213,7 +226,7 @@ const DWGROUPS=[
 let META,SUB,STOPS,ROUTES;                 // data
 let map,szLayer,routeLayers={},sel=null,mode='ti';
 // audience state
-let agePreset='all', bands=new Set(), sex='any', dwSel=new Set(), ctxMv=false, ctxDt=false, behSel=new Set();
+let agePreset='all', bands=new Set(), sex='any', dwSel=new Set(), ctxMv=false, ctxDt=false, behSel=new Set(), spendSel=new Set(), online=false;
 // computed per selection
 let szIdx=[], szCapped=[], szParts=[], rScores={};
 
@@ -225,7 +238,7 @@ const gm=a=>Math.exp(a.reduce((s,x)=>s+Math.log(Math.max(x,1e-6)),0)/a.length);
 async function boot(){
  try{
   document.title='v3:fetching';
-  const DV='v20260718c';
+  const DV='v20260718d';
   [META,SUB,STOPS,ROUTES]=await Promise.all(
     ['data/meta.json','data/subzones.json','data/stops_v3.json','data/routes.json'].map(u=>fetch(u+'?'+DV).then(r=>r.json())));
   document.title='v3:data-ok';
@@ -247,6 +260,7 @@ function buildControls(){
     c.onclick=()=>{agePreset=p.k;
       if(p.bands){bands=new Set(); for(let i=p.bands[0];i<=p.bands[1];i++)bands.add(i);}
       if(p.k==='all')bands=new Set();
+      if(p.k!=='all') clearOnline();         // online propensity derives from age mix
       document.querySelectorAll('#agePresets .c').forEach(x=>x.classList.remove('on')); c.classList.add('on');
       document.getElementById('bandgrid').style.display=p.k==='custom'?'flex':'none';
       syncBandGrid(); recompute();};
@@ -254,7 +268,7 @@ function buildControls(){
   const bg=document.getElementById('bandgrid');
   META.bands.forEach((b,i)=>{
     const c=document.createElement('span'); c.className='c'; c.id='band-'+i; c.textContent=b;
-    c.onclick=()=>{bands.has(i)?bands.delete(i):bands.add(i); syncBandGrid(); recompute();};
+    c.onclick=()=>{bands.has(i)?bands.delete(i):bands.add(i); if(bands.size)clearOnline(); syncBandGrid(); recompute();};
     bg.appendChild(c);});
   const sc=document.getElementById('sexChips');
   [['any','Any'],['f','Female'],['m','Male']].forEach(([k,l])=>{
@@ -267,6 +281,7 @@ function buildControls(){
     c.onclick=()=>{
       if(g.k==='any'){dwSel=new Set();}
       else{dwSel.has(g.k)?dwSel.delete(g.k):dwSel.add(g.k);}
+      if(dwSel.size) clearSpend();           // spend propensity derives from housing mix
       document.getElementById('dw-any').classList.toggle('on',dwSel.size===0);
       DWGROUPS.slice(1).forEach(x=>document.getElementById('dw-'+x.k).classList.toggle('on',dwSel.has(x.k)));
       recompute();};
@@ -279,12 +294,48 @@ function buildControls(){
     c.textContent=b.label; c.title=`${b.source} · ${b.n} locations`;
     c.onclick=()=>{behSel.has(i)?behSel.delete(i):behSel.add(i); c.classList.toggle('on',behSel.has(i)); recompute();};
     bc.appendChild(c);});
+  const spc=document.getElementById('spendChips');
+  META.spend_labels.forEach((lb,i)=>{
+    const c=document.createElement('span'); c.className='c sp'; c.id='sp-'+i;
+    c.textContent=lb; c.title='HES 2023 spend by dwelling type, joined via housing mix — replaces the Housing lever';
+    c.onclick=()=>{
+      spendSel.has(i)?spendSel.delete(i):spendSel.add(i);
+      if(spendSel.size) clearHousing();      // derives from housing mix — no stacking
+      c.classList.toggle('on',spendSel.has(i)); recompute();};
+    spc.appendChild(c);});
+  const oc=document.createElement('span'); oc.className='c sp'; oc.id='sp-online';
+  oc.textContent='Online shoppers';
+  oc.title=`IMDA online-shopper rate by age (${META.imda_vintage} vintage — gradient signal), joined via age mix — replaces the Age lever`;
+  oc.onclick=()=>{
+    online=!online;
+    if(online) clearAge();                   // derives from age mix — no stacking
+    oc.classList.toggle('on',online); recompute();};
+  spc.appendChild(oc);
   document.getElementById('mTI').onclick=e=>{mode='ti';toggleMode(e.target);};
   document.getElementById('mIDX').onclick=e=>{mode='idx';toggleMode(e.target);};
   document.getElementById('methodbtn').onclick=()=>document.getElementById('method').style.display='flex';
 }
 function syncBandGrid(){
   META.bands.forEach((b,i)=>document.getElementById('band-'+i).classList.toggle('on',bands.has(i)));
+}
+function clearHousing(){
+  dwSel=new Set();
+  document.getElementById('dw-any').classList.add('on');
+  DWGROUPS.slice(1).forEach(x=>document.getElementById('dw-'+x.k).classList.remove('on'));
+}
+function clearSpend(){
+  spendSel=new Set();
+  META.spend_labels.forEach((_,i)=>document.getElementById('sp-'+i).classList.remove('on'));
+}
+function clearAge(){
+  agePreset='all'; bands=new Set();
+  document.querySelectorAll('#agePresets .c').forEach(x=>x.classList.remove('on'));
+  document.getElementById('ap-all').classList.add('on');
+  document.getElementById('bandgrid').style.display='none';
+  syncBandGrid();
+}
+function clearOnline(){
+  online=false; document.getElementById('sp-online').classList.remove('on');
 }
 function toggleMode(btn){
   document.querySelectorAll('#modebar button').forEach(b=>b.classList.remove('on'));
@@ -332,6 +383,8 @@ function recompute(){
     }
     if(ctxMv){ if(p.mv==null)return; parts.push(p.mv/META.national.mv_rate*100); }
     if(ctxDt){ if(p.dt==null)return; parts.push(p.dt/META.national.dt_rate*100); }
+    for(const si of spendSel){ if(!p.sp)return; parts.push(p.sp[si]); }
+    if(online){ if(p.op==null)return; parts.push(p.op); }
     szParts[i]=parts;
     if(!parts.length){szIdx[i]=100;return;}
     const idx=gm(parts);
@@ -339,7 +392,7 @@ function recompute(){
   });
   // route scores — behaviour levers compose at STOP level
   rScores={};
-  const demActive=useAge||useDw||ctxMv||ctxDt, behActive=behSel.size>0;
+  const demActive=useAge||useDw||ctxMv||ctxDt||spendSel.size>0||online, behActive=behSel.size>0;
   const anyLever=demActive||behActive;
   for(const [n,r] of Object.entries(ROUTES)){
     let alloc=0,num=0,den=0,capv=0;
@@ -361,7 +414,7 @@ function recompute(){
     const cov=den/alloc;
     let conf='—';
     if(anyLever){
-      let notch=(ctxMv||ctxDt||behActive)?2:1;
+      let notch=(ctxMv||ctxDt||behActive||spendSel.size>0||online)?2:1;
       if(cov<0.8)notch++;
       if(den>0&&capv/den>0.10)notch++;
       conf=['','medium','low','very low','very low'][Math.min(notch,4)];
@@ -388,12 +441,14 @@ function audienceLabel(){
   if(ctxMv)parts.push('new-mover areas');
   if(ctxDt)parts.push('daytime-workforce areas');
   if(behSel.size)parts.push([...behSel].map(i=>META.behaviours[i].label.toLowerCase()).join(' + '));
+  if(spendSel.size)parts.push('high '+[...spendSel].map(i=>META.spend_labels[i].toLowerCase()).join(' + ')+' spend');
+  if(online)parts.push('online shoppers');
   return parts.length?parts.join(' · '):'everyone (measured volume only)';
 }
 const contiguous=a=>a.every((v,i)=>i===0||v===a[i-1]+1);
 function updateSummary(anyLever){
   const n=Object.values(rScores).filter(r=>mode!=='idx'||r.alloc>=META.index_mode_floor).length;
-  const multi=[ageActive(),dwSel.size>0,ctxMv,ctxDt,behSel.size>0].filter(Boolean).length>1;
+  const multi=[ageActive(),dwSel.size>0,ctxMv,ctxDt,behSel.size>0,spendSel.size>0,online].filter(Boolean).length>1;
   document.getElementById('audsum').innerHTML=
     `Audience: ${audienceLabel()} · ${n} routes ranked`+
     (multi?` <span class="warn">· combined levers are directional (correlation overstates concentration)</span>`:'');
@@ -492,7 +547,7 @@ function fillDetail(n){
       <div class="kv"><span>Data coverage of volume</span><b>${(s.cov*100).toFixed(0)}%</b></div>
       <div class="kv"><span>Confidence</span><b><span class="conf ${confCls(s.conf)}">${s.conf}</span></b></div>
       ${behRows(r)}
-      <div class="chips2"><span class="chip">equal-share allocation</span><span class="chip">residence join unverified</span><span class="chip">no ride-length factor</span>${behSel.size?`<span class="chip">location-inferred behaviour</span>`:''}${s.capped>0.005?`<span class="chip">${(s.capped*100).toFixed(0)}% index-capped</span>`:''}${[ageActive()||dwSel.size,ctxMv,ctxDt,behSel.size>0].filter(Boolean).length>1?`<span class="chip">multi-lever: directional</span>`:''}</div>
+      <div class="chips2"><span class="chip">equal-share allocation</span><span class="chip">residence join unverified</span><span class="chip">no ride-length factor</span>${behSel.size?`<span class="chip">location-inferred behaviour</span>`:''}${(spendSel.size||online)?`<span class="chip">propensity: ecological join</span>`:''}${s.capped>0.005?`<span class="chip">${(s.capped*100).toFixed(0)}% index-capped</span>`:''}${[ageActive()||dwSel.size,ctxMv,ctxDt,behSel.size>0,spendSel.size>0||online].filter(Boolean).length>1?`<span class="chip">multi-lever: directional</span>`:''}</div>
     </div>
     <div class="grp"><h3 class="ju">JUDGEMENT</h3>
       <div class="note">None applied. Context multipliers and format factors arrive with the ad-ops format sheet.</div>

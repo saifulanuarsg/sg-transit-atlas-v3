@@ -32,6 +32,24 @@ levers by geometric mean. HES 2023 spend-by-dwelling propensity was sought and
 identified but its by-dwelling tables are not machine-readable on data.gov.sg
 yet — named as the next data source, not proxied.
 
+**Spend & digital propensity (Ship 1.3):** eleven spend levers from HES 2023 —
+average monthly household expenditure by goods/services division × dwelling type
+(SingStat Tablebuilder table 17971, fetched via the Tablebuilder API), joined
+through each subzone's housing mix: eating out, groceries, clothing, home &
+furnishings, health, transport, info & communication, recreation & culture,
+education, insurance & financial, personal care. Plus an online-shoppers lever
+from IMDA's infocomm usage survey (online shoppers by age,
+d_276031cfd1b2929bb795cdcedd54989e; latest machine-readable year 2018 — the age
+gradient is the signal, levels are outdated), joined through age mix. Both are
+ecological joins and the UI enforces the collinearity gate: a propensity chip
+clears the Housing/Age lever it derives from, and vice versa. Raw source tables
+are vendored in rawdata/ so rebuilds don't depend on live endpoints.
+
+Sought and ruled out this round: NLB loans by branch (only a national annual
+index exists — no per-branch data), EMA electricity by planning area (real but
+collinear with the dwelling lever), NEA licensed eating establishments (exists,
+needs postal-code geocoding — future upgrade for the F&B layer).
+
 Subzone choropleth of the composed index; route detail card with figures grouped
 in three always-separate layers (Measured / Modelled / Judgement); language mix
 shown as creative guidance only — deliberately not a targeting filter. Rank by
