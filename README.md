@@ -45,6 +45,18 @@ ecological joins and the UI enforces the collinearity gate: a propensity chip
 clears the Housing/Age lever it derives from, and vice versa. Raw source tables
 are vendored in rawdata/ so rebuilds don't depend on live endpoints.
 
+**Persona presets (Ship 1.4):** a one-click row mirroring MooveSMART's 16-persona
+taxonomy, each a transparent recipe over the levers (hover shows ingredients).
+Backed by 8 new persona-grade spend levers from HES 2023 detail rows (travel =
+package holidays + air fares + accommodation; beauty & grooming; car ownership =
+vehicle purchase + running costs; video gaming; pet owners; entertainment &
+culture; tech equipment; tuition & enrichment — 19 spend levers total) and a
+2024-vintage "Digitally active" lever (IMDA internet usage by age,
+d_3f4bfee2d42f8fb3bea3218c01aa9902). Honest divergences: Property Owner →
+Property Intender (movers is what data supports); Car Owner is flagged for
+external formats; Gaming is flagged as a small spend base; **Job Seekers is a
+disabled chip** — no open-data signal exists and scoring it would be assertion.
+
 Sought and ruled out this round: NLB loans by branch (only a national annual
 index exists — no per-branch data), EMA electricity by planning area (real but
 collinear with the dwelling lever), NEA licensed eating establishments (exists,

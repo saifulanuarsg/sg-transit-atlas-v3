@@ -169,6 +169,17 @@ HES_DIVS = [  # (division rowNo, chip label)
     ("5", "Home & furnishings"), ("6", "Health spend"), ("7", "Transport spend"),
     ("8", "Info & communication"), ("9", "Recreation & culture"), ("10", "Education spend"),
     ("13", "Insurance & financial"), ("14", "Personal care & misc")]
+# persona-grade detail rows (summed) — appended to the same spend-lever system
+HES_DETAIL = [
+    (["9.8", "7.4", "12"], "Travel"),                 # package holidays + air fares + accommodation
+    (["14.1.1", "14.2.1"], "Beauty & grooming"),      # hairdressing/grooming + jewellery & watches
+    (["7.1", "7.2"], "Car ownership"),                # vehicle purchase + running costs
+    (["9.2.1.1", "9.4.3.1"], "Video gaming"),         # video games + subscriptions (small base)
+    (["9.3.2", "9.4.5"], "Pet owners"),               # pet products + vet services
+    (["9.6"], "Entertainment & culture"),             # cinema/theatre/concert + cultural services
+    (["8.1"], "Tech equipment"),                      # info & comm equipment
+    (["10.2"], "Tuition & enrichment"),               # private tuition + courses
+]
 # HES dwelling columns in census dw[] order 0..5 (Others dw[6] excluded, shares renormalised)
 HES_COL_ORDER = ["HDB Dwellings|1- & 2-Room Flats 2/", "HDB Dwellings|3-Room Flats",
                  "HDB Dwellings|4-Room Flats", "HDB Dwellings|5-Room & Executive Flats",
@@ -182,10 +193,17 @@ def flatcols(cols, pre=""):
     return out
 
 hes_rows = {str(r["rowNo"]): r for r in json.load(open(os.path.join(RAW, "hes2023_by_dwelling.json")))}
-hes_spend = []  # per division: [spend by 6 dwelling types]
+hes_spend = []  # per lever: [spend by 6 dwelling types]
 for div, _ in HES_DIVS:
     fc = flatcols(hes_rows[div]["columns"])
     hes_spend.append([num(fc.get(k)) for k in HES_COL_ORDER])
+for rows_, _ in HES_DETAIL:
+    vec = [0.0] * 6
+    for rn in rows_:
+        fc = flatcols(hes_rows[rn]["columns"])
+        vec = [a + num(fc.get(k)) for a, k in zip(vec, HES_COL_ORDER)]
+    hes_spend.append(vec)
+SPEND_LABELS = [lb for _, lb in HES_DIVS] + [lb for _, lb in HES_DETAIL]
 
 def dw_shares6(dw):
     tot = sum(dw[:6])
@@ -211,6 +229,26 @@ def online_rate(am, af):
 
 nat_online = online_rate(nat["am"], nat["af"])
 
+# IMDA internet usage by age — 2024 vintage, three broad bands (current gradient)
+dg_recs = json.load(open(os.path.join(RAW, "internet_by_age_annual.json")))
+dg_rates = {}
+for r in dg_recs:
+    s = r["DataSeries"]
+    if "18 - 39" in s: dg_rates["young"] = num(r["2024"]) / 100
+    elif "40 - 59" in s: dg_rates["mid"] = num(r["2024"]) / 100
+    elif "60 And Over" in s: dg_rates["senior"] = num(r["2024"]) / 100
+DG_BANDS = {"young": [4, 5, 6, 7], "mid": [8, 9, 10, 11], "senior": list(range(12, 19))}
+# (survey band 18-39 mapped to census 20-39; the 18-19 sliver is approximated — stated)
+
+def digital_rate(am, af):
+    n = d = 0.0
+    for grp, bl in DG_BANDS.items():
+        p = sum(am[b] + af[b] for b in bl)
+        n += p * dg_rates[grp]; d += p
+    return n / d if d > 0 else None
+
+nat_digital = digital_rate(nat["am"], nat["af"])
+
 def propensity(m):
     """per-subzone: sp[] spend indices + op online index (vs national = 100)"""
     out = {}
@@ -221,6 +259,8 @@ def propensity(m):
     if m.get("am"):
         r = online_rate(m["am"], m["af"])
         if r is not None: out["op"] = round(r / nat_online * 100, 1)
+        r2 = digital_rate(m["am"], m["af"])
+        if r2 is not None: out["dg"] = round(r2 / nat_digital * 100, 1)
     return out
 
 print(f"HES 2023 divisions baked: {len(HES_DIVS)} | national eating-out ${nat_spend[0]:.0f}/mo | "
@@ -282,7 +322,7 @@ meta = {
     "bands": BAND_LABELS, "dw_labels": DW_LABELS,
     "behaviours": [{"k": k, "label": lb, "source": src, "n": len(pts)} for k, lb, src, pts in BEHAVIOURS],
     "behaviour_base": b_base, "behaviour_floor": 25.0,
-    "spend_labels": [lb for _, lb in HES_DIVS], "imda_vintage": latest_yr,
+    "spend_labels": SPEND_LABELS, "imda_vintage": latest_yr, "digital_vintage": 2024,
     "national": {"pop": nat["pop"], "am": nat["am"], "af": nat["af"], "dw": nat["dw"],
                  "mv_rate": round(nat_mv, 5), "dt_rate": round(nat_dt, 4), "mix": nat["mix"]},
     "sources": {
@@ -293,7 +333,8 @@ meta = {
         "daytime": "Census 2020 employed residents by workplace planning area (d_be89529e906103da82ff06adec019f17)",
         "behaviour": "Consumer-behaviour layers: POI registries (OneMap themes, OSM, NEA hawker centres d_4a086da0a5553be1d89383cd90d07ecd, ECDA pre-schools d_61eefab99958fd70e6aab17320a71f1c) counted within 400 m of each stop. Locations observed; the behaviour is inferred.",
         "spend": "Spend propensity: HES 2023, average monthly household expenditure by type of goods and services (detailed) x dwelling type (SingStat Tablebuilder table 17971), joined through each subzone's housing mix (Others dwellings excluded, shares renormalised).",
-        "digital": f"Digital propensity: IMDA annual infocomm usage survey — online shoppers by age group (data.gov.sg d_276031cfd1b2929bb795cdcedd54989e, latest machine-readable year {latest_yr}), joined through each subzone's age mix. The age gradient is the signal; absolute {latest_yr} levels are outdated."},
+        "digital": f"Digital propensity: IMDA online shoppers by age (d_276031cfd1b2929bb795cdcedd54989e, latest machine-readable year {latest_yr} — gradient signal) and individuals' internet usage by age group, 2024 (d_3f4bfee2d42f8fb3bea3218c01aa9902, three broad bands; survey band 18-39 approximated onto census 20-39), each joined through subzone age mix.",
+        "personas": "Persona presets are one-click recipes over the open-data levers, named after MooveSMART's taxonomy for comparability. Each shows its ingredients in the audience line. Job Seekers is deliberately not scored: no open-data signal exists (MOM unemployment is national-only)."},
     "assumptions": [
         "Equal-share allocation: a stop's tap-ins are split equally across all services calling there (frequency data not held; OD-constrained allocation planned).",
         "Residence join: boarders are profiled as residents of the stop's subzone. This is the model's weakest link.",

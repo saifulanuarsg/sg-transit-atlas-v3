@@ -31,6 +31,9 @@
   .c.ctx.on{background:#7c3aed;border-color:#7c3aed}
   .c.beh.on{background:#0d9488;border-color:#0d9488;color:#fff}
   .c.sp.on{background:#d97706;border-color:#d97706;color:#fff}
+  .c.per{border-color:#ddd6fe;background:#faf5ff;color:#5b21b6}
+  .c.per:hover{border-color:#7c3aed}
+  .c.dis{opacity:.45;cursor:not-allowed} .c.dis:hover{border-color:var(--line)}
   #bandgrid{display:none;flex-wrap:wrap;gap:3px;margin-top:5px}
   #bandgrid .c{font-size:11px;padding:2px 8px}
   #audsum{font-size:11.5px;color:var(--accent);font-weight:600;margin-top:9px}
@@ -93,6 +96,10 @@
     </header>
 
     <div id="builder">
+      <div class="brow">
+        <div class="lab">Persona presets <span class="geo">MooveSMART-style · one-click recipes from the levers below</span></div>
+        <div class="chips" id="perChips"></div>
+      </div>
       <div class="brow">
         <div class="lab">Age <span class="geo">subzone · Census 2020</span></div>
         <div class="chips" id="agePresets"></div>
@@ -186,6 +193,14 @@
      flipping between floor and cap. A spend-propensity join from the Household Expenditure Survey 2023
      (by dwelling type) has been identified but its by-dwelling tables are not yet machine-readable on data.gov.sg;
      it is the named next data source, not silently proxied.</p>
+  <h3>Persona presets</h3>
+  <p>The persona row mirrors MooveSMART's 16-persona taxonomy for comparability, but each preset is a transparent
+     recipe over the open-data levers below it — hover a persona to see its ingredients. Notable mappings:
+     <i>Property Owner</i> is renamed <i>Property Intender</i> (mover/intender behaviour is what the data supports);
+     <i>Car Owner</i> uses vehicle purchase and running-cost spend and is best used for external formats;
+     <i>Gaming</i> rides on a small spend base (~$3/month household average) — treat as directional.
+     <i>Job Seekers</i> is deliberately not scored: no open-data signal exists (MOM unemployment is national-only),
+     and scoring it would be assertion dressed as data.</p>
   <h3>Spend &amp; digital propensity</h3>
   <p>Spend levers apply HES 2023 average monthly household expenditure (by goods/services division × dwelling
      type, SingStat Tablebuilder table 17971) to each subzone's housing mix. The online-shoppers lever applies
@@ -226,7 +241,28 @@ const DWGROUPS=[
 let META,SUB,STOPS,ROUTES;                 // data
 let map,szLayer,routeLayers={},sel=null,mode='ti';
 // audience state
-let agePreset='all', bands=new Set(), sex='any', dwSel=new Set(), ctxMv=false, ctxDt=false, behSel=new Set(), spendSel=new Set(), online=false;
+let agePreset='all', bands=new Set(), sex='any', dwSel=new Set(), ctxMv=false, ctxDt=false, behSel=new Set(), spendSel=new Set(), online=false, dgOn=false;
+// beh indices: 0 grocery 1 mall 2 fnb 3 hawker 4 yfam 5 sfam 6 fit 7 health 8 eldercare 9 remit 10 tourist 11 community
+// spend indices: 0 eating-out 1 groceries 2 clothing 3 home 4 health 5 transport 6 infocomm 7 recreation 8 education
+//                9 insurance 10 personal-care 11 travel 12 beauty 13 car 14 gaming 15 pets 16 entertainment 17 tech 18 tuition
+const PERSONAS=[
+  {k:'ent', label:'Entertainment Seeker', apply:{spend:[16]}},
+  {k:'food', label:'Food Lover', apply:{spend:[0], beh:[2,3]}},
+  {k:'trav', label:'Travel', apply:{spend:[11]}},
+  {k:'groc', label:'Grocery Buyer', apply:{spend:[1], beh:[0]}},
+  {k:'bty', label:'Beauty', apply:{spend:[12], beh:[1]}},
+  {k:'bank', label:'Banking', apply:{spend:[9]}},
+  {k:'par', label:'Parents w/ Young Children', apply:{age:'fam', beh:[4]}},
+  {k:'game', label:'Gaming', apply:{spend:[14]}, note:'small spend base (~$3/mo avg)'},
+  {k:'prop', label:'Property Intender', apply:{ctxMv:true}, note:'renamed from Property Owner — movers/intenders is what data supports'},
+  {k:'job', label:'Job Seekers', disabled:'No open-data signal exists (MOM unemployment is national-only). Scoring it would be assertion — deliberately not built.'},
+  {k:'ret', label:'Retirement', apply:{age:'snr', beh:[8]}},
+  {k:'fash', label:'Fashion', apply:{spend:[2], beh:[1]}},
+  {k:'car', label:'Car Owner', apply:{spend:[13]}, note:'best used for external formats (drivers see exteriors)'},
+  {k:'tech', label:'Technology', apply:{spend:[17], dg:true}},
+  {k:'ecom', label:'E-Commerce', apply:{online:true}},
+  {k:'hf', label:'Health & Fitness', apply:{spend:[4], beh:[6]}},
+];
 // computed per selection
 let szIdx=[], szCapped=[], szParts=[], rScores={};
 
@@ -238,7 +274,7 @@ const gm=a=>Math.exp(a.reduce((s,x)=>s+Math.log(Math.max(x,1e-6)),0)/a.length);
 async function boot(){
  try{
   document.title='v3:fetching';
-  const DV='v20260718d';
+  const DV='v20260718e';
   [META,SUB,STOPS,ROUTES]=await Promise.all(
     ['data/meta.json','data/subzones.json','data/stops_v3.json','data/routes.json'].map(u=>fetch(u+'?'+DV).then(r=>r.json())));
   document.title='v3:data-ok';
@@ -311,6 +347,21 @@ function buildControls(){
     if(online) clearAge();                   // derives from age mix — no stacking
     oc.classList.toggle('on',online); recompute();};
   spc.appendChild(oc);
+  const dc2=document.createElement('span'); dc2.className='c sp'; dc2.id='sp-dg';
+  dc2.textContent='Digitally active';
+  dc2.title=`IMDA internet usage by age group, ${META.digital_vintage} (three broad bands) — joined via age mix, replaces the Age lever`;
+  dc2.onclick=()=>{
+    dgOn=!dgOn;
+    if(dgOn) clearAge();
+    dc2.classList.toggle('on',dgOn); recompute();};
+  spc.appendChild(dc2);
+  const pc=document.getElementById('perChips');
+  PERSONAS.forEach(p=>{
+    const c=document.createElement('span');
+    c.className='c per'+(p.disabled?' dis':''); c.id='per-'+p.k; c.textContent=p.label;
+    c.title=p.disabled||('Applies: '+recipeText(p.apply)+(p.note?' · '+p.note:''));
+    if(!p.disabled) c.onclick=()=>setState(p.apply);
+    pc.appendChild(c);});
   document.getElementById('mTI').onclick=e=>{mode='ti';toggleMode(e.target);};
   document.getElementById('mIDX').onclick=e=>{mode='idx';toggleMode(e.target);};
   document.getElementById('methodbtn').onclick=()=>document.getElementById('method').style.display='flex';
@@ -334,8 +385,46 @@ function clearAge(){
   document.getElementById('bandgrid').style.display='none';
   syncBandGrid();
 }
-function clearOnline(){
-  online=false; document.getElementById('sp-online').classList.remove('on');
+function clearOnline(){  // both digital levers derive from age mix
+  online=false; dgOn=false;
+  document.getElementById('sp-online').classList.remove('on');
+  const d=document.getElementById('sp-dg'); if(d)d.classList.remove('on');
+}
+function recipeText(a){
+  const bits=[];
+  if(a.age)bits.push('age '+PRESETS.find(x=>x.k===a.age).label.toLowerCase());
+  (a.spend||[]).forEach(i=>bits.push(META.spend_labels[i].toLowerCase()+' spend'));
+  (a.beh||[]).forEach(i=>bits.push(META.behaviours[i].label.toLowerCase()+' density'));
+  if(a.ctxMv)bits.push('new-mover areas'); if(a.online)bits.push('online shoppers'); if(a.dg)bits.push('digitally active');
+  return bits.join(' + ');
+}
+function setState(a){
+  agePreset='all'; bands=new Set(); sex='any'; dwSel=new Set(); ctxMv=false; ctxDt=false;
+  behSel=new Set(); spendSel=new Set(); online=false; dgOn=false;
+  if(a.age){
+    agePreset=a.age;
+    const p=PRESETS.find(x=>x.k===a.age);
+    if(p&&p.bands)for(let i=p.bands[0];i<=p.bands[1];i++)bands.add(i);
+  }
+  (a.beh||[]).forEach(i=>behSel.add(i));
+  (a.spend||[]).forEach(i=>spendSel.add(i));
+  if(a.ctxMv)ctxMv=true; if(a.online)online=true; if(a.dg)dgOn=true;
+  syncAllUI(); recompute();
+}
+function syncAllUI(){
+  document.querySelectorAll('#agePresets .c').forEach(x=>x.classList.remove('on'));
+  const ap=document.getElementById('ap-'+agePreset); if(ap)ap.classList.add('on');
+  document.getElementById('bandgrid').style.display=agePreset==='custom'?'flex':'none';
+  syncBandGrid();
+  [...document.getElementById('sexChips').children].forEach((c,i)=>c.classList.toggle('on',['any','f','m'][i]===sex));
+  document.getElementById('dw-any').classList.toggle('on',dwSel.size===0);
+  DWGROUPS.slice(1).forEach(x=>document.getElementById('dw-'+x.k).classList.toggle('on',dwSel.has(x.k)));
+  document.getElementById('ctxMv').classList.toggle('on',ctxMv);
+  document.getElementById('ctxDt').classList.toggle('on',ctxDt);
+  META.behaviours.forEach((b,i)=>document.getElementById('beh-'+b.k).classList.toggle('on',behSel.has(i)));
+  META.spend_labels.forEach((_,i)=>{const el=document.getElementById('sp-'+i); if(el)el.classList.toggle('on',spendSel.has(i));});
+  document.getElementById('sp-online').classList.toggle('on',online);
+  document.getElementById('sp-dg').classList.toggle('on',dgOn);
 }
 function toggleMode(btn){
   document.querySelectorAll('#modebar button').forEach(b=>b.classList.remove('on'));
@@ -385,6 +474,7 @@ function recompute(){
     if(ctxDt){ if(p.dt==null)return; parts.push(p.dt/META.national.dt_rate*100); }
     for(const si of spendSel){ if(!p.sp)return; parts.push(p.sp[si]); }
     if(online){ if(p.op==null)return; parts.push(p.op); }
+    if(dgOn){ if(p.dg==null)return; parts.push(p.dg); }
     szParts[i]=parts;
     if(!parts.length){szIdx[i]=100;return;}
     const idx=gm(parts);
@@ -392,7 +482,7 @@ function recompute(){
   });
   // route scores — behaviour levers compose at STOP level
   rScores={};
-  const demActive=useAge||useDw||ctxMv||ctxDt||spendSel.size>0||online, behActive=behSel.size>0;
+  const demActive=useAge||useDw||ctxMv||ctxDt||spendSel.size>0||online||dgOn, behActive=behSel.size>0;
   const anyLever=demActive||behActive;
   for(const [n,r] of Object.entries(ROUTES)){
     let alloc=0,num=0,den=0,capv=0;
@@ -414,7 +504,7 @@ function recompute(){
     const cov=den/alloc;
     let conf='—';
     if(anyLever){
-      let notch=(ctxMv||ctxDt||behActive||spendSel.size>0||online)?2:1;
+      let notch=(ctxMv||ctxDt||behActive||spendSel.size>0||online||dgOn)?2:1;
       if(cov<0.8)notch++;
       if(den>0&&capv/den>0.10)notch++;
       conf=['','medium','low','very low','very low'][Math.min(notch,4)];
@@ -443,12 +533,13 @@ function audienceLabel(){
   if(behSel.size)parts.push([...behSel].map(i=>META.behaviours[i].label.toLowerCase()).join(' + '));
   if(spendSel.size)parts.push('high '+[...spendSel].map(i=>META.spend_labels[i].toLowerCase()).join(' + ')+' spend');
   if(online)parts.push('online shoppers');
+  if(dgOn)parts.push('digitally active');
   return parts.length?parts.join(' · '):'everyone (measured volume only)';
 }
 const contiguous=a=>a.every((v,i)=>i===0||v===a[i-1]+1);
 function updateSummary(anyLever){
   const n=Object.values(rScores).filter(r=>mode!=='idx'||r.alloc>=META.index_mode_floor).length;
-  const multi=[ageActive(),dwSel.size>0,ctxMv,ctxDt,behSel.size>0,spendSel.size>0,online].filter(Boolean).length>1;
+  const multi=[ageActive(),dwSel.size>0,ctxMv,ctxDt,behSel.size>0,spendSel.size>0,online||dgOn].filter(Boolean).length>1;
   document.getElementById('audsum').innerHTML=
     `Audience: ${audienceLabel()} · ${n} routes ranked`+
     (multi?` <span class="warn">· combined levers are directional (correlation overstates concentration)</span>`:'');
@@ -547,7 +638,7 @@ function fillDetail(n){
       <div class="kv"><span>Data coverage of volume</span><b>${(s.cov*100).toFixed(0)}%</b></div>
       <div class="kv"><span>Confidence</span><b><span class="conf ${confCls(s.conf)}">${s.conf}</span></b></div>
       ${behRows(r)}
-      <div class="chips2"><span class="chip">equal-share allocation</span><span class="chip">residence join unverified</span><span class="chip">no ride-length factor</span>${behSel.size?`<span class="chip">location-inferred behaviour</span>`:''}${(spendSel.size||online)?`<span class="chip">propensity: ecological join</span>`:''}${s.capped>0.005?`<span class="chip">${(s.capped*100).toFixed(0)}% index-capped</span>`:''}${[ageActive()||dwSel.size,ctxMv,ctxDt,behSel.size>0,spendSel.size>0||online].filter(Boolean).length>1?`<span class="chip">multi-lever: directional</span>`:''}</div>
+      <div class="chips2"><span class="chip">equal-share allocation</span><span class="chip">residence join unverified</span><span class="chip">no ride-length factor</span>${behSel.size?`<span class="chip">location-inferred behaviour</span>`:''}${(spendSel.size||online||dgOn)?`<span class="chip">propensity: ecological join</span>`:''}${s.capped>0.005?`<span class="chip">${(s.capped*100).toFixed(0)}% index-capped</span>`:''}${[ageActive()||dwSel.size,ctxMv,ctxDt,behSel.size>0,spendSel.size>0||online||dgOn].filter(Boolean).length>1?`<span class="chip">multi-lever: directional</span>`:''}</div>
     </div>
     <div class="grp"><h3 class="ju">JUDGEMENT</h3>
       <div class="note">None applied. Context multipliers and format factors arrive with the ad-ops format sheet.</div>
