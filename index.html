@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SG Transit Atlas v3 — audience planner</title>
+<title>SG Media Planner</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root{
@@ -112,8 +112,8 @@
 <div id="app">
   <div id="panel">
     <header>
-      <h1>SG Transit Atlas <span style="color:var(--accent)">v3</span> — audience planner</h1>
-      <div class="sub">Build an audience, get the bus routes that reach it · internal (passenger) model</div>
+      <h1>SG <span style="color:var(--accent)">Media Planner</span></h1>
+      <div class="sub">Build an audience, get the bus inventory that reaches it · passengers inside, street outside</div>
       <span class="badge">All figures modelled, not measured</span>
     </header>
 
@@ -261,7 +261,7 @@
 
 <div id="client"><div>
   <button class="x noprint" onclick="document.getElementById('client').style.display='none'">✕</button>
-  <div class="cbrand">SG Transit Atlas v3 — plan summary</div>
+  <div class="cbrand">SG Media Planner — plan summary</div>
   <span class="cbadge">Modelled opportunities to see — not panel-measured</span>
   <div id="cbody"></div>
   <button id="cprint" class="noprint" onclick="window.print()">Print / save as PDF</button>
@@ -339,7 +339,7 @@ async function boot(){
   buildControls(); document.title='v3:controls-ok';
   buildMap(); document.title='v3:map-ok';
   recompute();
-  document.title='SG Transit Atlas v3 — audience planner';
+  document.title='SG Media Planner';
  }catch(e){ document.title='v3 ERR: '+(e&&e.message||e); }
 }
 function buildControls(){
@@ -815,7 +815,7 @@ function openClient(){
     <div class="cfoot">Sources: LTA DataMall passenger volume (Jul 2026 bake) · SingStat Census 2020 ·
       URA Master Plan 2019 subzones · HDB resale (12 mo) · HES 2023 · IMDA infocomm surveys ·
       Singapore Open Data Licence. Generated ${new Date().toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'})} ·
-      SG Transit Atlas v3 (Ship 2).</div>`;
+      SG Media Planner (Ship 2).</div>`;
   document.getElementById('client').style.display='flex';
 }
 boot();

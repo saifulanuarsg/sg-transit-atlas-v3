@@ -1,4 +1,4 @@
-# SG Transit Atlas v3 — audience planner (Ship 1)
+# SG Media Planner (formerly Transit Atlas v3)
 
 Standalone app. **Separate from the v2 atlas by design** — the v2 repo
 (`_outputs/2026-07-14-sg-bus-routes-map/`) is read at build time and never modified.
@@ -71,7 +71,7 @@ score exists anywhere.
 
 ## Run
 
-`preview_start atlas-v3` (launch.json) or:
+`preview_start media-planner` (launch.json) or:
 `python3 -m http.server 8763 --directory _outputs/2026-07-18-transit-atlas-v3`
 
 ## Rebuild
